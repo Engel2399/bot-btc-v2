@@ -156,11 +156,15 @@ def senal(ahora_ms):
 
 # ----------------------------------------------------------------------------- cuenta
 def configurar_cuenta():
-    try:
-        firmado("POST", "/fapi/v1/positionSide/dual", {"dualSidePosition": "false"})
-    except BinanceError as e:
-        if e.code != -4059:          # -4059: ya está en one-way
-            raise
+    # Solo cambiar a one-way si la cuenta está en modo cobertura (hedge). Si ya es one-way no se toca:
+    # Binance rechaza el cambio (-4067) cuando hay órdenes abiertas, aunque el modo ya sea el correcto.
+    modo = firmado("GET", "/fapi/v1/positionSide/dual", {})
+    if modo.get("dualSidePosition") in (True, "true"):
+        try:
+            firmado("POST", "/fapi/v1/positionSide/dual", {"dualSidePosition": "false"})
+        except BinanceError as e:
+            if e.code != -4059:      # -4059: ya está en one-way
+                raise
     try:
         firmado("POST", "/fapi/v1/marginType", {"symbol": SYMBOL, "marginType": "ISOLATED"})
     except BinanceError as e:
