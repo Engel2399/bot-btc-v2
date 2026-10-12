@@ -287,9 +287,6 @@ def main():
             telegram(f"🛑 Bot en PAUSA (capital {capital:,.2f}). No opera hasta que lo revises.")
         return
 
-    if MODO != "simulacion":
-        configurar_cuenta()
-
     if actual == s["objetivo"]:
         if actual != 0 and MODO != "simulacion" and not stop_correcto(actual):
             cancelar_todo()
@@ -319,6 +316,9 @@ def main():
             raise RuntimeError(f"La posición no quedó cerrada (queda {amt2} BTC). Revisa a mano.")
 
     if s["objetivo"] != 0:
+        # La configuración (one-way, aislado, 1x) solo importa al abrir, y aquí la cuenta ya está sin
+        # posición ni órdenes, que es cuando Binance permite cambiarla.
+        configurar_cuenta()
         sal = saldos()
         precio = s["cierre4"]
         qty = redondear_abajo(sal["disponible"] * MARGEN_SEGURIDAD / precio, reglas["step"])
@@ -343,5 +343,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        telegram(f"❌ ERROR: {e}\nEl bot no completó esta ejecución. Revisa Binance y el registro de GitHub.")
+        import traceback
+        traceback.print_exc()
+        telegram(f"❌ ERROR: {e}\nEl bot no completó esta ejecución. Revisa Binance y el registro (logs/bot.log).")
         sys.exit(1)
