@@ -158,12 +158,25 @@ def senal(ahora_ms):
 def configurar_cuenta():
     # Solo cambiar a one-way si la cuenta está en modo cobertura (hedge). Si ya es one-way no se toca:
     # Binance rechaza el cambio (-4067) cuando hay órdenes abiertas, aunque el modo ya sea el correcto.
-    modo = firmado("GET", "/fapi/v1/positionSide/dual", {})
-    if modo.get("dualSidePosition") in (True, "true"):
+    # El modo real se deduce de las posiciones: en one-way aparecen como "BOTH"; en hedge, como LONG/SHORT.
+    # positionRisk v3 solo devuelve el símbolo si hay posición u órdenes; si viene vacío, la cuenta está
+    # limpia y se puede fijar one-way sin problema.
+    filas = firmado("GET", "/fapi/v3/positionRisk", {"symbol": SYMBOL})
+    lados = {p.get("positionSide", "BOTH") for p in filas if p.get("symbol") == SYMBOL}
+    if not lados or "BOTH" not in lados:
         try:
             firmado("POST", "/fapi/v1/positionSide/dual", {"dualSidePosition": "false"})
         except BinanceError as e:
-            if e.code != -4059:      # -4059: ya está en one-way
+            if e.code == -4059:      # ya está en one-way
+                pass
+            elif e.code == -4067 and not lados:
+                # Sin posición pero con órdenes (p. ej. un stop suelto): no se puede comprobar ahora.
+                # Se sigue; el flujo normal cancela las órdenes antes de abrir y la próxima ejecución lo fija.
+                print("Aviso: no se pudo confirmar el modo one-way (hay órdenes abiertas).")
+            elif lados:              # modo cobertura con posiciones/órdenes: no se puede arreglar solo
+                raise BinanceError(e.code, "La cuenta está en modo COBERTURA (hedge). Cierra todo y cámbiala a "
+                                           "One-way en Binance (Preferencias → Modo de posición).")
+            else:
                 raise
     try:
         firmado("POST", "/fapi/v1/marginType", {"symbol": SYMBOL, "marginType": "ISOLATED"})
